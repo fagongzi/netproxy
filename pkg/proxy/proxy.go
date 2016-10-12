@@ -55,7 +55,6 @@ type Proxy struct {
 	sync.RWMutex
 	cnf       *conf.Conf
 	apiServer *echo.Echo
-	wg        *sync.WaitGroup
 	servers   []*TCPServer
 
 	ctls map[string]*Ctl
@@ -67,30 +66,42 @@ func NewProxy(cnf *conf.Conf) *Proxy {
 		cnf:       cnf,
 		apiServer: echo.New(),
 		ctls:      make(map[string]*Ctl),
-		wg:        &sync.WaitGroup{},
 		servers:   make([]*TCPServer, len(cnf.Proxys)),
 	}
 }
 
 // Start start server
 func (p *Proxy) Start() {
-	go p.startAPIServer()
-
-	p.wg.Add(len(p.cnf.Proxys))
 	for index, proxy := range p.cnf.Proxys {
 		go func(proxy *conf.Proxy, index int) {
 			server := &TCPServer{
-				proxy:  proxy,
-				server: goetty.NewServer(proxy.Src, DECODER, ENCODER, goetty.NewInt64IdGenerator()),
-				p:      p,
+				proxy: proxy,
+				p:     p,
 			}
 			p.servers[index] = server
 			server.start()
-			p.wg.Done()
 		}(proxy, index)
 	}
 
-	p.wg.Wait()
+	p.startAPIServer()
+}
+
+// Pause pause proxy listen
+func (p *Proxy) Pause(addr string) {
+	for _, server := range p.servers {
+		if addr == server.proxy.Src {
+			server.pause()
+		}
+	}
+}
+
+// Resume resume proxy listen
+func (p *Proxy) Resume(addr string) {
+	for _, server := range p.servers {
+		if addr == server.proxy.Src {
+			server.resume()
+		}
+	}
 }
 
 // Stop stop server
@@ -149,18 +160,43 @@ func (p *Proxy) getCtl(addr string) *Ctl {
 
 // TCPServer TCPServer
 type TCPServer struct {
+	sync.RWMutex
 	proxy  *conf.Proxy
 	p      *Proxy
 	server *goetty.Server
+	paused bool
 }
 
 func (t *TCPServer) start() {
 	log.Infof("proxy <%s> to <%s>", t.proxy.Src, t.proxy.Target)
+	t.server = goetty.NewServer(t.proxy.Src, DECODER, ENCODER, goetty.NewInt64IdGenerator())
 	t.server.Serve(t.doServe)
 }
 
 func (t *TCPServer) stop() {
 	t.server.Stop()
+}
+
+func (t *TCPServer) pause() {
+	t.Lock()
+	if t.paused {
+		t.Unlock()
+		return
+	}
+	t.paused = true
+	t.stop()
+	t.Unlock()
+}
+
+func (t *TCPServer) resume() {
+	t.Lock()
+	if !t.paused {
+		t.Unlock()
+		return
+	}
+	t.paused = false
+	go t.start()
+	t.Unlock()
 }
 
 func (t *TCPServer) doServe(session goetty.IOSession) error {

@@ -26,7 +26,10 @@ var (
 func main() {
 	rootCmd.PersistentFlags().StringVar(&clicmd.Global.Endpoints, "endpoints", "127.0.0.1:8080", "netproxt api address")
 
-	rootCmd.AddCommand(clicmd.NewListCommand(), clicmd.NewUpdateCommand())
+	rootCmd.AddCommand(clicmd.NewListCommand(),
+		clicmd.NewUpdateCommand(),
+		clicmd.NewPauseCommand(),
+		clicmd.NewResumeCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		return

@@ -41,10 +41,6 @@
 			"Rev": "164a4974789b65b3aefc0adc2b4afe9cdce3f7b1"
 		},
 		{
-			"ImportPath": "github.com/inconshreveable/mousetrap",
-			"Rev": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
-		},
-		{
 			"ImportPath": "github.com/labstack/echo",
 			"Comment": "v2.0.0-beta.2-93-g986338c",
 			"Rev": "986338c805dcaf0aea0ffe2da2b3a57e1c6741b9"
@@ -93,18 +89,6 @@
 			"Rev": "f9ab0dce87d815821e221626b772e3475a0d2749"
 		},
 		{
-			"ImportPath": "github.com/siddontang/go/log",
-			"Rev": "354e14e6c093c661abb29fd28403b3c19cff5514"
-		},
-		{
-			"ImportPath": "github.com/spf13/cobra",
-			"Rev": "7c674d9e72017ed25f6d2b5e497a1368086b6a6f"
-		},
-		{
-			"ImportPath": "github.com/spf13/pflag",
-			"Rev": "f676131e2660dc8cd88de99f7486d34aa8172635"
-		},
-		{
 			"ImportPath": "github.com/valyala/fasttemplate",
 			"Rev": "3b874956e03f1636d171bda64b130f9135f42cff"
 		},
@@ -114,7 +98,7 @@
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
-			"Rev": "58e54f396d28b990640c591986da915ef5a8cbd3"
+			"Rev": "8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9"
 		}
 	]
 }

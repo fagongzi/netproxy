@@ -2,14 +2,8 @@
     "apiAddr": ":8080",
     "proxys": [
         {
-            "src": ":12345",
-            "target": "192.168.70.13:2181",
-            "timeoutConnect": 5,
-            "timeoutWrite": 30
-        },
-        {
-            "src": ":22345",
-            "target": "192.168.70.13:2181",
+            "src": ":6379",
+            "target": "192.168.159.130:6379",
             "timeoutConnect": 5,
             "timeoutWrite": 30
         }
