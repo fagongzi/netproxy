@@ -22,6 +22,7 @@ Usage of ./netproxy:
 ```
 
 #### 配置文件：
+
 ```
 {
     "apiAddr": ":8080",
@@ -46,6 +47,7 @@ Usage of ./netproxy:
     ]
 }
 ```
+
 #### 配置参数说明：
 * apiAddr
 restful的http接口，提供给cli程序使用，用来修改某一个客户端链接的丢包率，延迟设置，并且实时生效。
@@ -54,6 +56,7 @@ restful的http接口，提供给cli程序使用，用来修改某一个客户端
 
 ### cli
 cli是一个客户端命令行工具，通过api的restfulhttp接口和netproxy通信，动态的修改某一个客户端的延迟和丢包设置。主要包括list和update两个子命令
+
 ```
 ./cli --help
 A simple command line client for netproxy.
@@ -85,7 +88,8 @@ Usage:
   cli list [flags]
 
 Global Flags:
-      --endpoints string   netproxt api address (default "127.0.0.1:8080")```
+      --endpoints string   netproxt api address (default "127.0.0.1:8080")
+```
 
 #### update命令
 update 命令用于修改某一个客户端的丢包和超时配置
@@ -137,7 +141,7 @@ Global Flags:
 resume 命令用于恢复一个proxy的监听，模拟网络中断恢复
 
 ```
-./cli pause --help
+./cli resume --help
 Resume proxy on addr
 
 Usage:
