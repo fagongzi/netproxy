@@ -11,53 +11,15 @@ import (
 	"github.com/fagongzi/netproxy/pkg/util"
 	"github.com/labstack/echo"
 
-	"encoding/json"
-	"io"
-	"sort"
 	"time"
 )
-
-// Ctl ctl lossRate and so on
-type Ctl struct {
-	Address string   `json:"address"`
-	In      *CtlUnit `json:"in"`
-	Out     *CtlUnit `json:"out"`
-}
-
-// CtlUnit CtlUnit
-type CtlUnit struct {
-	LossRate int `json:"lossRate"`
-	DelayMs  int `json:"delayMs"`
-}
-
-// UnMarshalCtlFromReader UnMarshalCtlFromReader
-func UnMarshalCtlFromReader(r io.Reader) (*Ctl, error) {
-	v := &Ctl{}
-
-	decoder := json.NewDecoder(r)
-	err := decoder.Decode(v)
-
-	if nil != err {
-		return nil, err
-	}
-
-	return v, nil
-}
-
-// Marshal marshal
-func (c *Ctl) Marshal() []byte {
-	d, _ := json.Marshal(c)
-	return d
-}
 
 // Proxy proxy
 type Proxy struct {
 	sync.RWMutex
 	cnf       *conf.Conf
 	apiServer *echo.Echo
-	servers   []*TCPServer
-
-	ctls map[string]*Ctl
+	servers   map[string]*TCPServer
 }
 
 // NewProxy factory method
@@ -65,22 +27,21 @@ func NewProxy(cnf *conf.Conf) *Proxy {
 	return &Proxy{
 		cnf:       cnf,
 		apiServer: echo.New(),
-		ctls:      make(map[string]*Ctl),
-		servers:   make([]*TCPServer, len(cnf.Proxys)),
+		servers:   make(map[string]*TCPServer),
 	}
 }
 
 // Start start server
 func (p *Proxy) Start() {
-	for index, proxy := range p.cnf.Proxys {
-		go func(proxy *conf.Proxy, index int) {
+	for index, proxyUnit := range p.cnf.Units {
+		go func(proxyUnit *conf.ProxyUnit, index int) {
 			server := &TCPServer{
-				proxy: proxy,
-				p:     p,
+				proxyUnit: proxyUnit,
+				p:         p,
 			}
-			p.servers[index] = server
+			p.servers[proxyUnit.Src] = server
 			server.start()
-		}(proxy, index)
+		}(proxyUnit, index)
 	}
 
 	p.startAPIServer()
@@ -89,7 +50,7 @@ func (p *Proxy) Start() {
 // Pause pause proxy listen
 func (p *Proxy) Pause(addr string) {
 	for _, server := range p.servers {
-		if addr == server.proxy.Src {
+		if addr == server.proxyUnit.Src {
 			server.pause()
 		}
 	}
@@ -98,7 +59,7 @@ func (p *Proxy) Pause(addr string) {
 // Resume resume proxy listen
 func (p *Proxy) Resume(addr string) {
 	for _, server := range p.servers {
-		if addr == server.proxy.Src {
+		if addr == server.proxyUnit.Src {
 			server.resume()
 		}
 	}
@@ -111,65 +72,25 @@ func (p *Proxy) Stop() {
 	}
 }
 
-// GetAllClients GetAllClients
-func (p *Proxy) GetAllClients() []string {
-	p.RLock()
-	clients := make([]string, len(p.ctls))
-	index := 0
-	for key := range p.ctls {
-		clients[index] = key
-		index++
-	}
-	p.RUnlock()
-
-	sort.Strings(clients)
-
-	return clients
-}
-
 // UpdateCtl UpdateCtl
-func (p *Proxy) UpdateCtl(ctl *Ctl) {
+func (p *Proxy) UpdateCtl(ctl *conf.Ctl) {
 	p.Lock()
-	p.ctls[ctl.Address] = ctl
+	p.servers[ctl.Address].proxyUnit.Ctl.CopyFrom(ctl)
 	p.Unlock()
-}
-
-func (p *Proxy) addClientCtl(addr string) {
-	p.Lock()
-	p.ctls[addr] = &Ctl{
-		Address: addr,
-		In:      &CtlUnit{},
-		Out:     &CtlUnit{},
-	}
-	p.Unlock()
-}
-
-func (p *Proxy) deleteClientCtl(addr string) {
-	p.Lock()
-	delete(p.ctls, addr)
-	p.Unlock()
-}
-
-func (p *Proxy) getCtl(addr string) *Ctl {
-	p.RLock()
-	ctl := p.ctls[addr]
-	p.RUnlock()
-
-	return ctl
 }
 
 // TCPServer TCPServer
 type TCPServer struct {
 	sync.RWMutex
-	proxy  *conf.Proxy
-	p      *Proxy
-	server *goetty.Server
-	paused bool
+	proxyUnit *conf.ProxyUnit
+	p         *Proxy
+	server    *goetty.Server
+	paused    bool
 }
 
 func (t *TCPServer) start() {
-	log.Infof("proxy <%s> to <%s>", t.proxy.Src, t.proxy.Target)
-	t.server = goetty.NewServer(t.proxy.Src, DECODER, ENCODER, goetty.NewInt64IdGenerator())
+	log.Infof("proxy <%s> to <%s>", t.proxyUnit.Src, t.proxyUnit.Target)
+	t.server = goetty.NewServer(t.proxyUnit.Src, DECODER, ENCODER, goetty.NewInt64IdGenerator())
 	t.server.Serve(t.doServe)
 }
 
@@ -200,9 +121,6 @@ func (t *TCPServer) resume() {
 }
 
 func (t *TCPServer) doServe(session goetty.IOSession) error {
-	t.p.addClientCtl(session.RemoteAddr())
-	defer t.p.deleteClientCtl(session.RemoteAddr())
-
 	var data interface{}
 	var err error
 
@@ -211,7 +129,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 	_, err = conn.Connect()
 
 	if err != nil {
-		log.InfoErrorf(err, "Connect to <%s> failure.", t.proxy.Target)
+		log.InfoErrorf(err, "Connect to <%s> failure.", t.proxyUnit.Target)
 		return err
 	}
 
@@ -228,7 +146,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 			bytes, _ := data.([]byte)
 
 			// write bytes to client
-			ctl := t.p.getCtl(session.RemoteAddr())
+			ctl := t.proxyUnit.Ctl
 
 			if 0 == ctl.In.LossRate {
 				t.doWriteToClient(bytes, session, ctl.In)
@@ -252,7 +170,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 			bytes, _ := data.([]byte)
 
 			// write to target
-			ctl := t.p.getCtl(session.RemoteAddr())
+			ctl := t.proxyUnit.Ctl
 
 			if 0 == ctl.Out.LossRate {
 				t.doWrite(bytes, conn, ctl.Out)
@@ -260,7 +178,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 				if rand.Intn(100) > ctl.Out.LossRate {
 					t.doWrite(bytes, conn, ctl.Out)
 				} else {
-					log.Infof("Loss write <%+v> to <%s>", bytes, t.proxy.Target)
+					log.Infof("Loss write <%+v> to <%s>", bytes, t.proxyUnit.Target)
 				}
 			}
 		}
@@ -275,25 +193,25 @@ func (t *TCPServer) writeTimeout(addr string, conn *goetty.Connector) {
 
 func (t *TCPServer) createGoettyConf() *goetty.Conf {
 	return &goetty.Conf{
-		Addr:                   t.proxy.Target,
+		Addr:                   t.proxyUnit.Target,
 		TimeWheel:              util.GetTimeWheel(),
-		TimeoutWrite:           time.Second * time.Duration(t.proxy.TimeoutWrite),
-		TimeoutConnectToServer: time.Second * time.Duration(t.proxy.TimeoutConnect),
+		TimeoutWrite:           time.Second * time.Duration(t.proxyUnit.TimeoutWrite),
+		TimeoutConnectToServer: time.Second * time.Duration(t.proxyUnit.TimeoutConnect),
 		WriteTimeoutFn:         t.writeTimeout,
 	}
 }
 
-func (t *TCPServer) doWrite(bytes []byte, conn *goetty.Connector, ctl *CtlUnit) {
+func (t *TCPServer) doWrite(bytes []byte, conn *goetty.Connector, ctl *conf.CtlUnit) {
 	if ctl.DelayMs > 0 {
-		log.Infof("Delay <%d>ms write to <%s>", ctl.DelayMs, t.proxy.Target)
+		log.Infof("Delay <%d>ms write to <%s>", ctl.DelayMs, t.proxyUnit.Target)
 		time.Sleep(time.Millisecond * time.Duration(ctl.DelayMs))
 	}
 
 	conn.Write(bytes)
-	log.Infof("Write <%+v> to <%s>", bytes, t.proxy.Target)
+	log.Infof("Write <%+v> to <%s>", bytes, t.proxyUnit.Target)
 }
 
-func (t *TCPServer) doWriteToClient(bytes []byte, session goetty.IOSession, ctl *CtlUnit) {
+func (t *TCPServer) doWriteToClient(bytes []byte, session goetty.IOSession, ctl *conf.CtlUnit) {
 	if ctl.DelayMs > 0 {
 		log.Infof("Delay <%d>ms write to client<%s>", ctl.DelayMs, session.RemoteAddr())
 		time.Sleep(time.Millisecond * time.Duration(ctl.DelayMs))

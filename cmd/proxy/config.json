@@ -1,0 +1,22 @@
+{
+    "apiAddr": ":8080",
+    "units": [
+        {
+            "src": ":6379",
+            "target": "192.168.159.130:6379",
+            "desc": "zk server proxy",
+            "ctl": {
+                "in": {
+                    "lossRate": 0,
+                    "delayMs": 0
+                },
+                "out": {
+                    "lossRate": 0,
+                    "delayMs": 0
+                }
+            },
+            "timeoutConnect": 5,
+            "timeoutWrite": 30
+        }
+    ]
+}

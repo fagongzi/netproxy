@@ -8,6 +8,7 @@ import (
 
 	"io/ioutil"
 
+	"github.com/fagongzi/netproxy/pkg/proxy"
 	"github.com/spf13/cobra"
 )
 
@@ -24,10 +25,10 @@ func NewResumeCommand() *cobra.Command {
 
 // resumeCommandFunc executes the "resume" command.
 func resumeCommandFunc(cmd *cobra.Command, args []string) {
-	url := fmt.Sprintf("http://%s/api/proxy/resume", Global.Endpoints)
+	url := fmt.Sprintf("http://%s%s", Global.Endpoints, proxy.APIProxies)
 	cli := &http.Client{}
 	fmt.Printf("<%s> send to server\n", args[0])
-	request, _ := http.NewRequest("PUT", url, bytes.NewReader([]byte(args[0])))
+	request, _ := http.NewRequest("POST", url, bytes.NewReader([]byte(args[0])))
 	rsp, err := cli.Do(request)
 
 	if err != nil {

@@ -25,16 +25,21 @@ Usage of ./netproxy:
 ```
 {
     "apiAddr": ":8080",
-    "proxys": [
+    "units": [
         {
-            "src": ":12345",
-            "target": "192.168.70.13:2181",
-            "timeoutConnect": 5,
-            "timeoutWrite": 30
-        },
-        {
-            "src": ":22345",
-            "target": "192.168.70.13:2182",
+            "src": ":6379",
+            "target": "192.168.159.130:6379",
+            "desc": "zk server proxy",
+            "ctl": {
+                "in": {
+                    "lossRate": 0,
+                    "delayMs": 0
+                },
+                "out": {
+                    "lossRate": 0,
+                    "delayMs": 0
+                }
+            },
             "timeoutConnect": 5,
             "timeoutWrite": 30
         }
@@ -44,9 +49,8 @@ Usage of ./netproxy:
 #### 配置参数说明：
 * apiAddr
 restful的http接口，提供给cli程序使用，用来修改某一个客户端链接的丢包率，延迟设置，并且实时生效。
-* proxys
-代理设置，可以设置多个代理，那么netproxy就会监听多个端口。其中src表示netproxy监听的端口，target代表代理的实际服务的地址。
-
+* units
+代理设置，可以设置多个代理，那么netproxy就会监听多个端口。其中src表示netproxy监听的端口，target代表代理的实际服务的地址，ctl是网络控制。
 
 ### cli
 cli是一个客户端命令行工具，通过api的restfulhttp接口和netproxy通信，动态的修改某一个客户端的延迟和丢包设置。主要包括list和update两个子命令
@@ -58,8 +62,10 @@ Usage:
   cli [command]
 
 Available Commands:
-  list        List the clients
-  update      Update the client ctl
+  list        List the proxies
+  update      Update the proxy ctl
+  pause       Pause proxy on addr
+  resume      Resume proxy on addr
 
 Flags:
       --endpoints string   netproxt api address (default "127.0.0.1:8080")
@@ -69,38 +75,36 @@ Use "cli [command] --help" for more information about a command.
 
 
 #### list命令
-list 命令列出当前和netproxy链接的所有客户端地址
+list 命令列出所有proxy的信息
 
 ```
 ./cli list --help
-List the clients
+List the proxies
 
 Usage:
-  cli list [options] [flags]
+  cli list [flags]
 
 Global Flags:
-      --endpoints string   netproxt api address (default "127.0.0.1:8080")
-```
+      --endpoints string   netproxt api address (default "127.0.0.1:8080")```
 
 #### update命令
 update 命令用于修改某一个客户端的丢包和超时配置
 
 ```
 ./cli update --help
-Update the client ctl
+Update the proxy ctl
 
 Usage:
-  cli update [options] <client> [clients] [flags]
+  cli update <proxyAddr> [flags]
 
 Flags:
-      --client string      which client.
       --in-delayMs int     set the client receive packet delay.
       --in-lossRate int    set the client receive packet loss rate.
       --out-delayMs int    set the client sent packet delay.
       --out-lossRate int   set the client sent packet loss rate.
 
 Global Flags:
-      --endpoints string   netproxt api address (default "127.0.0.1:8080")
+      --endpoints string   netproxy api address (default "127.0.0.1:8080")
 ```
 
 #####  参数说明
@@ -112,6 +116,37 @@ Global Flags:
 控制客户端程序发包的延迟
 * out-lossRate
 控制客户端程序发包的丢包率
+
+#### pause命令
+pause 命令用于暂停一个proxy的监听，模拟网络中断不通
+
+```
+./cli pause --help
+Pause proxy on addr
+
+Usage:
+  cli pause <addr> [flags]
+
+Global Flags:
+      --endpoints string   netproxy api address (default "127.0.0.1:8080")
+
+```
+
+
+#### resume命令
+resume 命令用于恢复一个proxy的监听，模拟网络中断恢复
+
+```
+./cli pause --help
+Resume proxy on addr
+
+Usage:
+  cli resume <addr> [flags]
+
+Global Flags:
+      --endpoints string   netproxy api address (default "127.0.0.1:8080")
+```
+
 
 
 
