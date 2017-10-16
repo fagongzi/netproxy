@@ -125,7 +125,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 	_, err = conn.Connect()
 
 	if err != nil {
-		log.InfoErrorf(err, "Connect to <%s> failure.", t.proxyUnit.Target)
+		log.Errorf("Connect to <%s> failure. err=%+v", t.proxyUnit.Target, err)
 		return err
 	}
 
@@ -164,7 +164,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 	for {
 		_, err = session.Read()
 		if err != nil {
-			log.InfoErrorf(err, "Read from client<%s> failure.", session.RemoteAddr())
+			log.Infof("Read from client<%s> failure.err=%+v", session.RemoteAddr(), err)
 			break
 		} else {
 			// write to target
