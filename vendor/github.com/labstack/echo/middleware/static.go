@@ -3,39 +3,48 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo"
 )
 
 type (
-	// StaticConfig defines the config for static middleware.
+	// StaticConfig defines the config for Static middleware.
 	StaticConfig struct {
-		// Root is the directory from where the static content is served.
+		// Skipper defines a function to skip middleware.
+		Skipper Skipper
+
+		// Root directory from where the static content is served.
 		// Required.
 		Root string `json:"root"`
 
-		// Index is the list of index files to be searched and used when serving
-		// a directory.
-		// Optional, with default value as []string{"index.html"}.
-		Index []string `json:"index"`
+		// Index file for serving a directory.
+		// Optional. Default value "index.html".
+		Index string `json:"index"`
 
-		// Browse is a flag to enable/disable directory browsing.
-		// Optional, with default value as false.
+		// Enable HTML5 mode by forwarding all not-found requests to root so that
+		// SPA (single-page application) can handle the routing.
+		// Optional. Default value false.
+		HTML5 bool `json:"html5"`
+
+		// Enable directory browsing.
+		// Optional. Default value false.
 		Browse bool `json:"browse"`
 	}
 )
 
 var (
-	// DefaultStaticConfig is the default static middleware config.
+	// DefaultStaticConfig is the default Static middleware config.
 	DefaultStaticConfig = StaticConfig{
-		Index:  []string{"index.html"},
-		Browse: false,
+		Skipper: DefaultSkipper,
+		Index:   "index.html",
 	}
 )
 
-// Static returns a static middleware to serves static content from the provided
+// Static returns a Static middleware to serves static content from the provided
 // root directory.
 func Static(root string) echo.MiddlewareFunc {
 	c := DefaultStaticConfig
@@ -43,78 +52,99 @@ func Static(root string) echo.MiddlewareFunc {
 	return StaticWithConfig(c)
 }
 
-// StaticWithConfig returns a static middleware from config.
+// StaticWithConfig returns a Static middleware with config.
 // See `Static()`.
 func StaticWithConfig(config StaticConfig) echo.MiddlewareFunc {
 	// Defaults
-	if config.Index == nil {
+	if config.Root == "" {
+		config.Root = "." // For security we want to restrict to CWD.
+	}
+	if config.Skipper == nil {
+		config.Skipper = DefaultStaticConfig.Skipper
+	}
+	if config.Index == "" {
 		config.Index = DefaultStaticConfig.Index
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			fs := http.Dir(config.Root)
-			p := c.Request().URL().Path()
-			if strings.Contains(c.Path(), "*") { // If serving from a group, e.g. `/static*`.
-				p = c.P(0)
-			}
-			file := path.Clean(p)
-			f, err := fs.Open(file)
-			if err != nil {
+		return func(c echo.Context) (err error) {
+			if config.Skipper(c) {
 				return next(c)
 			}
-			defer f.Close()
-			fi, err := f.Stat()
+
+			p := c.Request().URL.Path
+			if strings.HasSuffix(c.Path(), "*") { // When serving from a group, e.g. `/static*`.
+				p = c.Param("*")
+			}
+			p, err = echo.PathUnescape(p)
 			if err != nil {
-				return err
+				return
+			}
+			name := filepath.Join(config.Root, path.Clean("/"+p)) // "/"+ for security
+
+			fi, err := os.Stat(name)
+			if err != nil {
+				if os.IsNotExist(err) {
+					if err = next(c); err != nil {
+						if he, ok := err.(*echo.HTTPError); ok {
+							if config.HTML5 && he.Code == http.StatusNotFound {
+								return c.File(filepath.Join(config.Root, config.Index))
+							}
+						}
+						return
+					}
+				}
+				return
 			}
 
 			if fi.IsDir() {
-				/* NOTE:
-				Not checking the Last-Modified header as it caches the response `304` when
-				changing different directories for the same path.
-				*/
-				d := f
+				index := filepath.Join(name, config.Index)
+				fi, err = os.Stat(index)
 
-				// Index file
-				// TODO: search all files
-				file = path.Join(file, config.Index[0])
-				f, err = fs.Open(file)
-				if err == nil {
-					// Index file
-					if fi, err = f.Stat(); err != nil {
-						return err
+				if err != nil {
+					if config.Browse {
+						return listDir(name, c.Response())
 					}
-				} else if err != nil && config.Browse {
-					dirs, err := d.Readdir(-1)
-					if err != nil {
-						return err
+					if os.IsNotExist(err) {
+						return next(c)
 					}
-
-					// Create a directory index
-					res := c.Response()
-					res.Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
-					if _, err = fmt.Fprintf(res, "<pre>\n"); err != nil {
-						return err
-					}
-					for _, d := range dirs {
-						name := d.Name()
-						color := "#212121"
-						if d.IsDir() {
-							color = "#e91e63"
-							name += "/"
-						}
-						if _, err = fmt.Fprintf(res, "<a href=\"%s\" style=\"color: %s;\">%s</a>\n", name, color, name); err != nil {
-							return err
-						}
-					}
-					_, err = fmt.Fprintf(res, "</pre>\n")
-					return err
-				} else {
-					return next(c)
+					return
 				}
+
+				return c.File(index)
 			}
-			return c.ServeContent(f, fi.Name(), fi.ModTime())
+
+			return c.File(name)
 		}
 	}
+}
+
+func listDir(name string, res *echo.Response) (err error) {
+	dir, err := os.Open(name)
+	if err != nil {
+		return
+	}
+	dirs, err := dir.Readdir(-1)
+	if err != nil {
+		return
+	}
+
+	// Create a directory index
+	res.Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+	if _, err = fmt.Fprintf(res, "<pre>\n"); err != nil {
+		return
+	}
+	for _, d := range dirs {
+		name := d.Name()
+		color := "#212121"
+		if d.IsDir() {
+			color = "#e91e63"
+			name += "/"
+		}
+		if _, err = fmt.Fprintf(res, "<a href=\"%s\" style=\"color: %s;\">%s</a>\n", name, color, name); err != nil {
+			return
+		}
+	}
+	_, err = fmt.Fprintf(res, "</pre>\n")
+	return
 }

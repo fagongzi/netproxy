@@ -3,7 +3,7 @@
     "units": [
         {
             "src": ":6379",
-            "target": "192.168.159.130:6379",
+            "target": "127.0.0.1:6379",
             "desc": "zk server proxy",
             "ctl": {
                 "in": {

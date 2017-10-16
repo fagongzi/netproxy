@@ -1,17 +1,14 @@
 package proxy
 
 import (
-	"sync"
-
 	"math/rand"
-
-	"github.com/CodisLabs/codis/pkg/utils/log"
-	"github.com/fagongzi/goetty"
-	"github.com/fagongzi/netproxy/pkg/conf"
-	"github.com/fagongzi/netproxy/pkg/util"
-	"github.com/labstack/echo"
-
+	"sync"
 	"time"
+
+	"github.com/fagongzi/goetty"
+	"github.com/fagongzi/log"
+	"github.com/fagongzi/netproxy/pkg/conf"
+	"github.com/labstack/echo"
 )
 
 // Proxy proxy
@@ -90,8 +87,8 @@ type TCPServer struct {
 
 func (t *TCPServer) start() {
 	log.Infof("proxy <%s> to <%s>", t.proxyUnit.Src, t.proxyUnit.Target)
-	t.server = goetty.NewServer(t.proxyUnit.Src, DECODER, ENCODER, goetty.NewInt64IdGenerator())
-	t.server.Serve(t.doServe)
+	t.server = goetty.NewServer(t.proxyUnit.Src, DECODER, ENCODER, goetty.NewInt64IDGenerator())
+	t.server.Start(t.doServe)
 }
 
 func (t *TCPServer) stop() {
@@ -121,7 +118,6 @@ func (t *TCPServer) resume() {
 }
 
 func (t *TCPServer) doServe(session goetty.IOSession) error {
-	var data interface{}
 	var err error
 
 	// client connected, make a connection to target
@@ -137,13 +133,15 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 
 	// read loop from target
 	go func() {
+		in := conn.InBuf()
+
 		for {
-			data, err := conn.Read()
+			_, err := conn.Read()
 			if err != nil {
 				return
 			}
 
-			bytes, _ := data.([]byte)
+			bytes := in.RawBuf()[in.GetReaderIndex():in.GetWriteIndex()]
 
 			// write bytes to client
 			ctl := t.proxyUnit.Ctl
@@ -157,21 +155,21 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 					log.Infof("Loss write to <%s>", bytes, session.RemoteAddr())
 				}
 			}
+
+			in.SetReaderIndex(in.GetWriteIndex())
 		}
 	}()
 
+	in := session.InBuf()
 	for {
-		data, err = session.Read()
-
+		_, err = session.Read()
 		if err != nil {
 			log.InfoErrorf(err, "Read from client<%s> failure.", session.RemoteAddr())
 			break
 		} else {
-			bytes, _ := data.([]byte)
-
 			// write to target
 			ctl := t.proxyUnit.Ctl
-
+			bytes := in.RawBuf()[in.GetReaderIndex():in.GetWriteIndex()]
 			if 0 == ctl.Out.LossRate {
 				t.doWrite(bytes, conn, ctl.Out)
 			} else {
@@ -182,41 +180,34 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 				}
 			}
 		}
+
+		in.SetReaderIndex(in.GetWriteIndex())
 	}
 
 	return err
 }
 
-func (t *TCPServer) writeTimeout(addr string, conn *goetty.Connector) {
-	log.Warnf("Conn<%s> write timeout.", addr)
-}
-
 func (t *TCPServer) createGoettyConf() *goetty.Conf {
 	return &goetty.Conf{
-		Addr:                   t.proxyUnit.Target,
-		TimeWheel:              util.GetTimeWheel(),
-		TimeoutWrite:           time.Second * time.Duration(t.proxyUnit.TimeoutWrite),
+		Addr: t.proxyUnit.Target,
 		TimeoutConnectToServer: time.Second * time.Duration(t.proxyUnit.TimeoutConnect),
-		WriteTimeoutFn:         t.writeTimeout,
 	}
 }
 
-func (t *TCPServer) doWrite(bytes []byte, conn *goetty.Connector, ctl *conf.CtlUnit) {
+func (t *TCPServer) doWrite(bytes []byte, conn goetty.IOSession, ctl *conf.CtlUnit) {
 	if ctl.DelayMs > 0 {
 		log.Infof("Delay <%d>ms write to <%s>", ctl.DelayMs, t.proxyUnit.Target)
 		time.Sleep(time.Millisecond * time.Duration(ctl.DelayMs))
 	}
 
 	conn.Write(bytes)
-	log.Infof("Write <%+v> to <%s>", bytes, t.proxyUnit.Target)
 }
 
-func (t *TCPServer) doWriteToClient(bytes []byte, session goetty.IOSession, ctl *conf.CtlUnit) {
+func (t *TCPServer) doWriteToClient(bytes []byte, conn goetty.IOSession, ctl *conf.CtlUnit) {
 	if ctl.DelayMs > 0 {
-		log.Infof("Delay <%d>ms write to client<%s>", ctl.DelayMs, session.RemoteAddr())
+		log.Infof("Delay <%d>ms write to client<%s>", ctl.DelayMs, conn.RemoteAddr())
 		time.Sleep(time.Millisecond * time.Duration(ctl.DelayMs))
 	}
 
-	session.Write(bytes)
-	log.Infof("Write <%+v> to client<%s>", bytes, session.RemoteAddr())
+	conn.Write(bytes)
 }

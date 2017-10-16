@@ -22,8 +22,7 @@ func NewTransparentDecoder() goetty.Decoder {
 
 // Decode decode
 func (d TransparentDecoder) Decode(in *goetty.ByteBuf) (bool, interface{}, error) {
-	_, data, err := in.ReadAll()
-	return true, data, err
+	return true, nil, nil
 }
 
 // TransparentEncoder TransparentEncoder

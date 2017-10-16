@@ -1,54 +1,47 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 
-	"encoding/json"
-	"io/ioutil"
-
-	"github.com/CodisLabs/codis/pkg/utils/log"
+	"github.com/fagongzi/log"
 	"github.com/fagongzi/netproxy/pkg/conf"
-	l "github.com/fagongzi/netproxy/pkg/log"
 	"github.com/fagongzi/netproxy/pkg/proxy"
-	"github.com/fagongzi/netproxy/pkg/util"
 )
 
 var (
-	cpus     = flag.Int("cpus", 1, "use cpu nums")
-	file     = flag.String("config", "", "config file")
-	logFile  = flag.String("log-file", "", "which file to record log, if not set stdout to use.")
-	logLevel = flag.String("log-level", "info", "log level.")
+	cpus = flag.Int("cpus", 1, "use cpu nums")
+	file = flag.String("cfg", "", "config file")
 )
 
 func main() {
 	flag.Parse()
+	log.InitLog()
 
 	runtime.GOMAXPROCS(*cpus)
 
-	l.InitLog(*logFile)
-	l.SetLogLevel(*logLevel)
-
 	data, err := ioutil.ReadFile(*file)
 	if err != nil {
-		log.PanicErrorf(err, "read config file <%s> failure.", *file)
+		log.Fatalf("read config file <%s> failure. err:%+v", *file, err)
 	}
 
 	cnf := &conf.Conf{}
 	err = json.Unmarshal(data, cnf)
 	if err != nil {
-		log.PanicErrorf(err, "parse config file <%s> failure.", *file)
+		log.Fatalf("parse config file <%s> failure. error:%+v", *file, err)
 	}
 
-	util.Init()
-
 	p := proxy.NewProxy(cnf)
-
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM, os.Kill)
+	signal.Notify(c,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
 	go func() {
 		<-c

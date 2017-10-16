@@ -3,10 +3,8 @@ package clicmd
 import (
 	"bytes"
 	"fmt"
-
-	"net/http"
-
 	"io/ioutil"
+	"net/http"
 
 	"github.com/fagongzi/netproxy/pkg/proxy"
 	"github.com/spf13/cobra"

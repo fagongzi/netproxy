@@ -9,26 +9,30 @@ import (
 )
 
 type (
-	// RecoverConfig defines the config for recover middleware.
+	// RecoverConfig defines the config for Recover middleware.
 	RecoverConfig struct {
-		// StackSize is the stack size to be printed.
-		// Optional, with default value as 4 KB.
-		StackSize int
+		// Skipper defines a function to skip middleware.
+		Skipper Skipper
+
+		// Size of the stack to be printed.
+		// Optional. Default value 4KB.
+		StackSize int `json:"stack_size"`
 
 		// DisableStackAll disables formatting stack traces of all other goroutines
 		// into buffer after the trace for the current goroutine.
-		// Optional, with default value as false.
-		DisableStackAll bool
+		// Optional. Default value false.
+		DisableStackAll bool `json:"disable_stack_all"`
 
 		// DisablePrintStack disables printing stack trace.
-		// Optional, with default value as false.
-		DisablePrintStack bool
+		// Optional. Default value as false.
+		DisablePrintStack bool `json:"disable_print_stack"`
 	}
 )
 
 var (
-	// DefaultRecoverConfig is the default recover middleware config.
+	// DefaultRecoverConfig is the default Recover middleware config.
 	DefaultRecoverConfig = RecoverConfig{
+		Skipper:           DefaultSkipper,
 		StackSize:         4 << 10, // 4 KB
 		DisableStackAll:   false,
 		DisablePrintStack: false,
@@ -41,16 +45,23 @@ func Recover() echo.MiddlewareFunc {
 	return RecoverWithConfig(DefaultRecoverConfig)
 }
 
-// RecoverWithConfig returns a recover middleware from config.
-// See `Recover()`.
+// RecoverWithConfig returns a Recover middleware with config.
+// See: `Recover()`.
 func RecoverWithConfig(config RecoverConfig) echo.MiddlewareFunc {
 	// Defaults
+	if config.Skipper == nil {
+		config.Skipper = DefaultRecoverConfig.Skipper
+	}
 	if config.StackSize == 0 {
 		config.StackSize = DefaultRecoverConfig.StackSize
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			if config.Skipper(c) {
+				return next(c)
+			}
+
 			defer func() {
 				if r := recover(); r != nil {
 					var err error
@@ -63,7 +74,7 @@ func RecoverWithConfig(config RecoverConfig) echo.MiddlewareFunc {
 					stack := make([]byte, config.StackSize)
 					length := runtime.Stack(stack, !config.DisableStackAll)
 					if !config.DisablePrintStack {
-						c.Logger().Printf("[%s] %s %s", color.Red("PANIC RECOVER"), err, stack[:length])
+						c.Logger().Printf("[%s] %s %s\n", color.Red("PANIC RECOVER"), err, stack[:length])
 					}
 					c.Error(err)
 				}

@@ -1,18 +1,16 @@
 package util
 
 import (
-	"github.com/fagongzi/goetty"
 	"time"
+
+	"github.com/fagongzi/goetty"
 )
 
 var (
-	TimeWheel = goetty.NewHashedTimeWheel(time.Millisecond, 60, 3)
+	tw = goetty.NewTimeoutWheel(goetty.WithTickInterval(time.Millisecond * 100))
 )
 
-func Init() {
-	TimeWheel.Start()
-}
-
-func GetTimeWheel() *goetty.HashedTimeWheel {
-	return TimeWheel
+// GetTimeWheel get time wheel
+func GetTimeWheel() *goetty.TimeoutWheel {
+	return tw
 }

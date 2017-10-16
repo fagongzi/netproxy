@@ -1,12 +1,10 @@
 package clicmd
 
 import (
-	"fmt"
-
-	"net/http"
-
 	"bytes"
+	"fmt"
 	"io/ioutil"
+	"net/http"
 
 	"github.com/fagongzi/netproxy/pkg/conf"
 	"github.com/fagongzi/netproxy/pkg/proxy"
