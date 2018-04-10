@@ -34,5 +34,5 @@
   version = "3.2.3"
 
 [[constraint]]
-  branch = "master"
   name = "github.com/spf13/cobra"
+  version = "v0.0.2"

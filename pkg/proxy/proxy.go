@@ -87,7 +87,9 @@ type TCPServer struct {
 
 func (t *TCPServer) start() {
 	log.Infof("proxy <%s> to <%s>", t.proxyUnit.Src, t.proxyUnit.Target)
-	t.server = goetty.NewServer(t.proxyUnit.Src, DECODER, ENCODER, goetty.NewInt64IDGenerator())
+	t.server = goetty.NewServer(t.proxyUnit.Src,
+		goetty.WithServerDecoder(DECODER),
+		goetty.WithServerEncoder(ENCODER))
 	t.server.Start(t.doServe)
 }
 
@@ -121,9 +123,11 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 	var err error
 
 	// client connected, make a connection to target
-	conn := goetty.NewConnector(t.createGoettyConf(), DECODER, ENCODER)
+	conn := goetty.NewConnector(t.proxyUnit.Target,
+		goetty.WithClientDecoder(DECODER),
+		goetty.WithClientEncoder(ENCODER),
+		goetty.WithClientConnectTimeout(time.Second*time.Duration(t.proxyUnit.TimeoutConnect)))
 	_, err = conn.Connect()
-
 	if err != nil {
 		log.Errorf("Connect to <%s> failure. err=%+v", t.proxyUnit.Target, err)
 		return err
@@ -152,7 +156,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 				if rand.Intn(100) > ctl.In.LossRate {
 					t.doWriteToClient(bytes, session, ctl.In)
 				} else {
-					log.Infof("Loss write to <%s>", bytes, session.RemoteAddr())
+					log.Infof("Loss write to %d bytes", len(bytes), session.RemoteAddr())
 				}
 			}
 
@@ -176,7 +180,7 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 				if rand.Intn(100) > ctl.Out.LossRate {
 					t.doWrite(bytes, conn, ctl.Out)
 				} else {
-					log.Infof("Loss write <%+v> to <%s>", bytes, t.proxyUnit.Target)
+					log.Infof("Loss write %d bytes to <%s>", len(bytes), t.proxyUnit.Target)
 				}
 			}
 		}
@@ -185,13 +189,6 @@ func (t *TCPServer) doServe(session goetty.IOSession) error {
 	}
 
 	return err
-}
-
-func (t *TCPServer) createGoettyConf() *goetty.Conf {
-	return &goetty.Conf{
-		Addr: t.proxyUnit.Target,
-		TimeoutConnectToServer: time.Second * time.Duration(t.proxyUnit.TimeoutConnect),
-	}
 }
 
 func (t *TCPServer) doWrite(bytes []byte, conn goetty.IOSession, ctl *conf.CtlUnit) {
