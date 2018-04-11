@@ -111,6 +111,7 @@ func (sm *syncClientMiddleware) Closed(conn IOSession) {
 	sm.localOffset = 0
 	sm.serverOffset = 0
 	sm.syncing = false
+	sm.timeouts = 0
 }
 
 func (sm *syncClientMiddleware) Connected(conn IOSession) {
@@ -118,6 +119,7 @@ func (sm *syncClientMiddleware) Connected(conn IOSession) {
 	sm.localOffset = 0
 	sm.serverOffset = 0
 	sm.syncing = false
+	sm.timeouts = 0
 }
 
 func (sm *syncClientMiddleware) ReadError(err error, conn IOSession) error {
@@ -125,6 +127,7 @@ func (sm *syncClientMiddleware) ReadError(err error, conn IOSession) error {
 		netErr.Timeout() &&
 		sm.timeouts < sm.maxReadTimeouts {
 		sm.timeouts++
+		sm.syncing = false
 		return sm.writer(conn, &notifyHB{
 			offset: sm.getLocalOffset(),
 		})

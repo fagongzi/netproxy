@@ -10,8 +10,8 @@
 [[projects]]
   name = "github.com/fagongzi/goetty"
   packages = ["."]
-  revision = "adc30fa4f856f776de42893140793c7d17458bfb"
-  version = "v1.1.0"
+  revision = "be9ef486eb2217eb72c2b147f007ad5c34f80fcc"
+  version = "v1.1.1"
 
 [[projects]]
   branch = "master"
